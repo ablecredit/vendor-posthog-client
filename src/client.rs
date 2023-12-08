@@ -1,8 +1,9 @@
 use anyhow::Result;
+use reqwest::header::CONTENT_TYPE;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
-use reqwest::header::CONTENT_TYPE;
+use super::google::GoogleSecretManager;
 
 const API_ENDPOINT: &str = "https://app.posthog.com/";
 const APT_CAPTURE: &str = "capture/";
@@ -16,7 +17,7 @@ pub struct ApiOptions {
 
 pub struct Client {
     options: ApiOptions,
-    client: reqwest::blocking::Client,
+    client: reqwest::Client,
 }
 
 #[derive(serde::Serialize, Debug, PartialEq, Eq)]
@@ -32,7 +33,7 @@ pub struct Properties {
     properties: HashMap<String, String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 struct InnerEvent {
     api_key: String,
     event: String,
@@ -50,14 +51,18 @@ impl ApiOptions {
         Ok(ApiOptions::new(API_ENDPOINT.to_string(), key))
     }
 
-    pub fn from_google_secret_manager() -> Result<ApiOptions> {
-        todo!("Implement me!")
+    pub async fn from_google_secret_manager(project: &str, secret: &str) -> Result<ApiOptions> {
+        let google_secret_manager = GoogleSecretManager::new().await?;
+        let key = google_secret_manager.get_secret(project, secret).await?;
+        let key = String::from_utf8(key)?;
+
+        Ok(ApiOptions::new(API_ENDPOINT.to_string(), key))
     }
 
-    pub fn auto() -> Result<ApiOptions> {
+    pub async fn auto(project: &str, secret: &str) -> Result<ApiOptions> {
         match ApiOptions::from_env() {
             Ok(options) => Ok(options),
-            Err(_) => match ApiOptions::from_google_secret_manager() {
+            Err(_) => match ApiOptions::from_google_secret_manager(project, secret).await {
                 Ok(options) => Ok(options),
                 Err(e) => Err(e),
             },
@@ -67,47 +72,37 @@ impl ApiOptions {
 
 impl Client {
     pub fn new(options: ApiOptions) -> Client {
-        let client = reqwest::blocking::Client::builder()
-            .timeout(TIMEOUT)
-            .build()
-            .unwrap();
-        Client { options, client}
+        let client = reqwest::Client::builder().timeout(TIMEOUT).build().unwrap();
+
+        Client { options, client }
     }
 
     pub fn set_timeout(&mut self, timeout: Duration) {
-        self.client = reqwest::blocking::Client::builder()
-            .timeout(timeout)
-            .build()
-            .unwrap();
+        self.client = reqwest::Client::builder().timeout(timeout).build().unwrap();
     }
 
-    pub fn capture(&self, event: Event) -> Result<()> {
+    pub async fn capture(&self, event: Event) -> Result<()> {
         let inner_event = InnerEvent::new(event, self.options.key.clone());
-        let url = format!(
-            "{}{}",
-            self.options.endpoint, APT_CAPTURE
-        );
+        let url = format!("{}{}", self.options.endpoint, APT_CAPTURE);
+
         let _response = self
             .client
             .post(url)
-            .header(CONTENT_TYPE, "application/json")
-            .body(serde_json::to_string(&inner_event)?)
+            .json(&inner_event)
             .send()
+            .await
             .map_err(|e| anyhow::anyhow!(e))?;
-
-        println!("{:?}", _response);
 
         Ok(())
     }
 
-    pub fn capture_batch(&self, events: Vec<Event>) -> Result<()> {
+    pub async fn capture_batch(&self, events: Vec<Event>) -> Result<()> {
         for event in events {
-            self.capture(event)?;
+            self.capture(event).await?;
         }
 
         Ok(())
     }
-
 }
 
 impl Event {
@@ -161,9 +156,10 @@ impl Properties {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pretty_assertions::assert_eq;
     use serde_json;
 
-    fn test_client(client: &Client) {
+    async fn test_client(client: &Client) {
         let mut event = Event::new("user_logged_in".to_string(), "distinct_id_user".to_string());
         event.insert_prop("key".to_string(), "value".to_string());
         event.insert_prop_many(vec![
@@ -171,7 +167,7 @@ mod tests {
             ("key2".to_string(), "value2".to_string()),
         ]);
         event.set_timestamp(chrono::Utc::now().naive_utc());
-        client.capture(event).unwrap();
+        client.capture(event).await.unwrap();
     }
 
     #[test]
@@ -184,21 +180,22 @@ mod tests {
         assert_eq!(json, assert_json.parse::<serde_json::Value>().unwrap());
     }
 
-    #[test]
-    fn test_client_env() {
+    #[tokio::test]
+    async fn test_client_env() {
         let opts = ApiOptions::from_env();
         assert!(opts.is_ok());
         let opts = opts.unwrap();
         let client = Client::new(opts);
-        test_client(&client);
+        test_client(&client).await;
     }
 
-    #[test]
-    fn test_client_google_secret_manager() {
-        let opts = ApiOptions::from_google_secret_manager();
-        assert!(opts.is_err());
-        let opts = opts.unwrap();
-        let client = Client::new(opts);
-        test_client(&client);
+    #[tokio::test]
+    async fn test_client_google_secret_manager() {
+        todo!();
+        // let opts = ApiOptions::from_google_secret_manager();
+        // assert!(opts.is_err());
+        // let opts = opts.unwrap();
+        // let client = Client::new(opts);
+        // test_client(&client).await;
     }
 }
