@@ -64,6 +64,8 @@ impl ApiOptions {
 
     pub fn from_env() -> Result<ApiOptions> {
         let key = std::env::var(POSTHOG_ENV)?;
+        assert!(!key.trim().is_empty());
+
         Ok(ApiOptions::new(API_ENDPOINT.to_string(), key))
     }
 
@@ -71,6 +73,8 @@ impl ApiOptions {
         let google_secret_manager = GoogleSecretManager::new().await?;
         let key = google_secret_manager.get_secret(project, secret).await?;
         let key = String::from_utf8(key)?;
+
+        assert!(!key.trim().is_empty());
 
         Ok(ApiOptions::new(API_ENDPOINT.to_string(), key))
     }
@@ -110,7 +114,7 @@ impl Client {
         let _response = match timeout(self.timeout, future).await {
             Ok(response) => response,
             Err(e) => {
-                return Err(anyhow::anyhow!("Timeout Error: {}", e));
+                return Err(anyhow::anyhow!("Error: {}", e));
             }
         };
 
