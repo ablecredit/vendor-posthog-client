@@ -1,15 +1,31 @@
 use anyhow::Result;
-use reqwest::header::CONTENT_TYPE;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
 use super::google::GoogleSecretManager;
+use hyper;
+use hyper::client::HttpConnector;
+use hyper::header::CONTENT_TYPE;
+use hyper::Request;
+use hyper_tls::HttpsConnector;
+use tokio::sync::OnceCell;
+use tokio::time::timeout;
 
 const API_ENDPOINT: &str = "https://app.posthog.com/";
 const APT_CAPTURE: &str = "capture/";
-const TIMEOUT: Duration = Duration::from_millis(8000);
+const TIMEOUT: Duration = Duration::from_millis(2000);
 const POSTHOG_ENV: &str = "POSTHOG_API_KEY";
 
+
+static HYPER_CLIENT: OnceCell<hyper::Client<HttpsConnector<HttpConnector>>> = OnceCell::const_new();
+
+async fn init_hyper_client() -> hyper::Client<HttpsConnector<HttpConnector>> {
+    let https = HttpsConnector::new();
+    let client = hyper::Client::builder().build::<_, hyper::Body>(https);
+    client
+}
+
+#[derive(Debug)]
 pub struct ApiOptions {
     endpoint: String,
     key: String,
@@ -17,7 +33,7 @@ pub struct ApiOptions {
 
 pub struct Client {
     options: ApiOptions,
-    client: reqwest::Client,
+    timeout: Duration,
 }
 
 #[derive(serde::Serialize, Debug, PartialEq, Eq)]
@@ -71,27 +87,33 @@ impl ApiOptions {
 }
 
 impl Client {
-    pub fn new(options: ApiOptions) -> Client {
-        let client = reqwest::Client::builder().timeout(TIMEOUT).build().unwrap();
-
-        Client { options, client }
+    pub async fn new(options: ApiOptions) -> Client {
+        Client { options , timeout: TIMEOUT}
     }
 
-    pub fn set_timeout(&mut self, timeout: Duration) {
-        self.client = reqwest::Client::builder().timeout(timeout).build().unwrap();
+    pub async fn new_with_timeout(options: ApiOptions, timeout: Duration) -> Client {
+        Client { options, timeout }
     }
 
     pub async fn capture(&self, event: Event) -> Result<()> {
+        let client = HYPER_CLIENT.get_or_init(init_hyper_client).await;
         let inner_event = InnerEvent::new(event, self.options.key.clone());
         let url = format!("{}{}", self.options.endpoint, APT_CAPTURE);
 
-        let _response = self
-            .client
-            .post(url)
-            .json(&inner_event)
-            .send()
-            .await
-            .map_err(|e| anyhow::anyhow!(e))?;
+        let request = Request::builder()
+            .method("POST")
+            .uri(url)
+            .header(CONTENT_TYPE, "application/json")
+            .body(hyper::Body::from(serde_json::to_string(&inner_event)?))?;
+
+        let future = client.request(request);
+        let _response = match timeout(self.timeout, future).await {
+            Ok(response) => response,
+            Err(e) => {
+                return Err(anyhow::anyhow!("Timeout Error: {}", e));
+            }
+        };
+
 
         Ok(())
     }
@@ -160,11 +182,11 @@ mod tests {
     use serde_json;
 
     async fn test_client(client: &Client) {
-        let mut event = Event::new("user_logged_in".to_string(), "distinct_id_user".to_string());
-        event.insert_prop("key".to_string(), "value".to_string());
+        let mut event = Event::new("xambit_test_event".to_string(), "distinct_id_username_test".to_string());
+        event.insert_prop("test_key".to_string(), "test_value".to_string());
         event.insert_prop_many(vec![
-            ("key1".to_string(), "value1".to_string()),
-            ("key2".to_string(), "value2".to_string()),
+            ("test_key1".to_string(), "test_value1".to_string()),
+            ("test_key2".to_string(), "test_value2".to_string()),
         ]);
         event.set_timestamp(chrono::Utc::now().naive_utc());
         client.capture(event).await.unwrap();
@@ -185,17 +207,19 @@ mod tests {
         let opts = ApiOptions::from_env();
         assert!(opts.is_ok());
         let opts = opts.unwrap();
-        let client = Client::new(opts);
+        let client = Client::new(opts).await;
         test_client(&client).await;
     }
 
     #[tokio::test]
     async fn test_client_google_secret_manager() {
-        todo!();
-        // let opts = ApiOptions::from_google_secret_manager();
-        // assert!(opts.is_err());
-        // let opts = opts.unwrap();
-        // let client = Client::new(opts);
-        // test_client(&client).await;
+        let project = std::env::var("PROJECT").unwrap();
+        let secret = std::env::var("SECRET").unwrap();
+        let opts = ApiOptions::from_google_secret_manager(project.as_str(),secret.as_str()).await;
+        assert!(opts.is_ok());
+
+        let opts = opts.unwrap();
+        let client = Client::new(opts).await;
+        test_client(&client).await;
     }
 }
