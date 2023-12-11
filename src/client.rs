@@ -133,21 +133,21 @@ impl Client {
 }
 
 impl Event {
-    pub fn new(event: String, distinct_id: String) -> Event {
+    pub fn new<T: Into<String>>(event: T, distinct_id: T) -> Event {
         Event {
-            event,
-            properties: Properties::new(distinct_id),
+            event: event.into(),
+            properties: Properties::new(distinct_id.into()),
             timestamp: None,
         }
     }
 
-    pub fn insert_prop(&mut self, key: String, value: String) {
-        self.properties.insert(key, value);
+    pub fn insert_prop<T: Into<String>>(&mut self, key: T, value: T) {
+        self.properties.insert(key.into(), value.into());
     }
 
-    pub fn insert_prop_many(&mut self, props: Vec<(String, String)>) {
+    pub fn insert_prop_many<T: Into<String>>(&mut self, props: Vec<(T, T)>) {
         props.into_iter().for_each(|(key, value)| {
-            self.properties.insert(key, value);
+            self.properties.insert(key.into(), value.into());
         });
     }
 
