@@ -14,7 +14,7 @@ log = "0"
 google-secretmanager1 = "*"
 hyper = "0"# update to 1.0.1
 hyper-tls = "0.5"
-tokio = {version = "1", features = ["full"]}
+tokio = {version = "1", default-features = false, features = ["rt-multi-thread", "macros"]}
 
 [dev-dependencies]
 pretty_assertions = "1"
