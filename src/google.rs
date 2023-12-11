@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 use google_secretmanager1::hyper::client::HttpConnector;
 use google_secretmanager1::hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 use google_secretmanager1::{
-    hyper, hyper_rustls,
+    hyper,
     oauth2::{read_service_account_key, ServiceAccountAuthenticator},
     SecretManager,
 };
