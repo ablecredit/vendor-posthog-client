@@ -25,12 +25,13 @@ async fn init_hyper_client() -> hyper::Client<HttpsConnector<HttpConnector>> {
     client
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ApiOptions {
     endpoint: String,
     key: String,
 }
 
+#[derive(Debug, Clone)]
 pub struct Client {
     options: ApiOptions,
     timeout: Duration,
