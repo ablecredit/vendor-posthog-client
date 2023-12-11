@@ -92,7 +92,7 @@ impl ApiOptions {
 }
 
 impl Client {
-    pub async fn new(options: ApiOptions) -> Client {
+    pub fn new(options: ApiOptions) -> Client {
         Client { options , timeout: TIMEOUT}
     }
 
@@ -212,7 +212,7 @@ mod tests {
         let opts = ApiOptions::from_env();
         assert!(opts.is_ok());
         let opts = opts.unwrap();
-        let client = Client::new(opts).await;
+        let client = Client::new(opts);
         test_client(&client).await;
     }
 
@@ -224,7 +224,7 @@ mod tests {
         assert!(opts.is_ok());
 
         let opts = opts.unwrap();
-        let client = Client::new(opts).await;
+        let client = Client::new(opts);
         test_client(&client).await;
     }
 }
