@@ -135,7 +135,7 @@ impl Client {
 impl Event {
     pub fn new<T: Into<String>>(event: T, distinct_id: T) -> Event {
         Event {
-            event: event.into().to_lowercase(),
+            event: event.into(),
             properties: Properties::new(distinct_id.into()),
             timestamp: None,
         }
@@ -160,7 +160,7 @@ impl InnerEvent {
     pub fn new(event: Event, api_key: String) -> InnerEvent {
         InnerEvent {
             api_key,
-            event: event.event,
+            event: event.event.to_lowercase(),
             properties: event.properties,
             timestamp: event.timestamp,
         }
