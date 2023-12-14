@@ -135,7 +135,7 @@ impl Client {
 impl Event {
     pub fn new<T: Into<String>>(event: T, distinct_id: T) -> Event {
         Event {
-            event: event.into(),
+            event: event.into().to_lowercase(),
             properties: Properties::new(distinct_id.into()),
             timestamp: None,
         }
@@ -187,7 +187,7 @@ mod tests {
     use serde_json;
 
     async fn test_client(client: &Client) {
-        let mut event = Event::new("test_event".to_string(), "distinct_id_username_test".to_string());
+        let mut event = Event::new("TEST_EVENT".to_string(), "distinct_id_username_test".to_string());
         event.insert_prop("test_key".to_string(), "test_value".to_string());
         event.insert_prop_many(vec![
             ("test_key1".to_string(), "test_value1".to_string()),
