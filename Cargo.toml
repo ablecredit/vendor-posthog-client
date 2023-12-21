@@ -14,7 +14,9 @@ log = "0"
 google-secretmanager1 = "*"
 hyper = "0"# update to 1.0.1
 hyper-tls = "0.5"
-tokio = {version = "1", default-features = false, features = ["rt-multi-thread", "macros"]}
+tokio = {version = "1.35.0", default-features = false, features = ["rt-multi-thread", "macros"]}
+google-auth-helper = {git = "https://github.com/xAmbit-ai/google-auth-helper", rev = "92cbe53"}
+nimbus = { git = "https://github.com/xAmbit-ai/nimbus", rev = "0b897bd"}
 
 [dev-dependencies]
 pretty_assertions = "1"

@@ -2,7 +2,6 @@ use anyhow::Result;
 use serde::{Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
-use super::google::GoogleSecretManager;
 use hyper;
 use hyper::client::HttpConnector;
 use hyper::header::CONTENT_TYPE;
@@ -10,6 +9,9 @@ use hyper::Request;
 use hyper_tls::HttpsConnector;
 use tokio::sync::OnceCell;
 use tokio::time::timeout;
+use google_secretmanager1::{SecretManager, oauth2::authenticator::Authenticator};
+use google_auth_helper::helper::AuthHelper;
+use nimbus::SecretManagerHelper;
 
 const API_ENDPOINT: &str = "https://app.posthog.com/";
 const APT_CAPTURE: &str = "capture/";
@@ -71,9 +73,12 @@ impl ApiOptions {
     }
 
     pub async fn from_google_secret_manager(project: &str, secret: &str) -> Result<ApiOptions> {
-        let google_secret_manager = GoogleSecretManager::new().await?;
-        let key = google_secret_manager.get_secret(project, secret).await?;
+        let auth = Authenticator::auth().await?;
+        let client = SecretManager::new_with_authenticator(auth).await;
+
+        let key = client.get_secret(project, secret).await?;
         let key = String::from_utf8(key)?;
+
 
         assert!(!key.trim().is_empty());
 
@@ -221,7 +226,9 @@ mod tests {
         let project = std::env::var("PROJECT").unwrap();
         let secret = std::env::var("SECRET").unwrap();
         let opts = ApiOptions::from_google_secret_manager(project.as_str(),secret.as_str()).await;
-        assert!(opts.is_ok());
+        if opts.is_err() {
+            panic!("Error: {}", opts.err().unwrap());
+        }
 
         let opts = opts.unwrap();
         let client = Client::new(opts);
