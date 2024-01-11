@@ -11,11 +11,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 chrono = { version = "0", features = ["serde"] }
 log = "0"
-google-secretmanager1 = "*"
-hyper = "0"# update to 1.0.1
-hyper-tls = "0"
 tokio = {version = "1", default-features = false, features = ["rt-multi-thread", "macros"]}
-google-auth-helper = {git = "https://github.com/xAmbit-ai/google-auth-helper", rev = "2864a48"}
+google-auth-helper = {git = "https://github.com/xAmbit-ai/google-auth-helper", rev = "8e66408"}
 nimbus = { git = "https://github.com/xAmbit-ai/nimbus", rev = "371ff15"}
 
 [dev-dependencies]

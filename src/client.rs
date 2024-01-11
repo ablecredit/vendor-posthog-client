@@ -2,16 +2,19 @@ use anyhow::Result;
 use serde::{Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
-use hyper;
-use hyper::client::HttpConnector;
-use hyper::header::CONTENT_TYPE;
-use hyper::Request;
-use hyper_tls::HttpsConnector;
 use tokio::sync::OnceCell;
 use tokio::time::timeout;
-use google_secretmanager1::{SecretManager, oauth2::authenticator::Authenticator};
 use google_auth_helper::helper::AuthHelper;
-use nimbus::SecretManagerHelper;
+use nimbus::{SecretManagerHelper};
+use nimbus::{SecretManager, Authenticator, DefaultConnector};
+use nimbus::google_secretmanager1::{
+    hyper::{
+        header::CONTENT_TYPE,
+        Request,
+        self,
+    },
+    hyper_rustls::HttpsConnectorBuilder
+};
 
 const API_ENDPOINT: &str = "https://app.posthog.com/";
 const APT_CAPTURE: &str = "capture/";
@@ -19,10 +22,16 @@ const TIMEOUT: Duration = Duration::from_millis(2000);
 const POSTHOG_ENV: &str = "POSTHOG_API_KEY";
 
 
-static HYPER_CLIENT: OnceCell<hyper::Client<HttpsConnector<HttpConnector>>> = OnceCell::const_new();
+static HYPER_CLIENT: OnceCell<hyper::Client<DefaultConnector>> = OnceCell::const_new();
 
-async fn init_hyper_client() -> hyper::Client<HttpsConnector<HttpConnector>> {
-    let https = HttpsConnector::new();
+async fn init_hyper_client() -> hyper::Client<DefaultConnector> {
+    let https = HttpsConnectorBuilder::new()
+        .with_native_roots()
+        .https_or_http()
+        .enable_http1()
+        .enable_http2()
+        .build();
+
     let client = hyper::Client::builder().build::<_, hyper::Body>(https);
     client
 }
