@@ -12,9 +12,10 @@ serde_json = "1"
 chrono = { version = "0", features = ["serde"] }
 log = "0"
 tokio = {version = "1", default-features = false, features = ["rt-multi-thread", "macros"]}
-google-auth-helper = {git = "https://github.com/xAmbit-ai/google-auth-helper", rev = "8e66408"}
-nimbus = { git = "https://github.com/xAmbit-ai/nimbus", rev = "371ff15"}
-
+aws-config = "1"
+aws-sdk-secretsmanager = "1"
+hyper = { version = "0", features = ["client"]}
+hyper-tls = "0.5"
 [dev-dependencies]
 pretty_assertions = "1"
 

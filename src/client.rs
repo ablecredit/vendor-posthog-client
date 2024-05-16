@@ -1,20 +1,18 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use serde::{Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio::sync::OnceCell;
 use tokio::time::timeout;
-use google_auth_helper::helper::AuthHelper;
-use nimbus::{SecretManagerHelper};
-use nimbus::{SecretManager, Authenticator, DefaultConnector};
-use nimbus::google_secretmanager1::{
-    hyper::{
+use aws_config::{load_defaults, BehaviorVersion};
+use hyper::{
         header::CONTENT_TYPE,
+        client::HttpConnector,
         Request,
-        self,
-    },
-    hyper_rustls::HttpsConnectorBuilder
+        self
 };
+use hyper_tls::HttpsConnector;
+
 
 const API_ENDPOINT: &str = "https://app.posthog.com/";
 const APT_CAPTURE: &str = "capture/";
@@ -22,18 +20,12 @@ const TIMEOUT: Duration = Duration::from_millis(2000);
 const POSTHOG_ENV: &str = "POSTHOG_API_KEY";
 
 
-static HYPER_CLIENT: OnceCell<hyper::Client<DefaultConnector>> = OnceCell::const_new();
+static HYPER_CLIENT: OnceCell<hyper::Client<HttpsConnector<HttpConnector>>> = OnceCell::const_new();
 
-async fn init_hyper_client() -> hyper::Client<DefaultConnector> {
-    let https = HttpsConnectorBuilder::new()
-        .with_native_roots()
-        .https_or_http()
-        .enable_http1()
-        .enable_http2()
-        .build();
+async fn init_hyper_client() -> hyper::Client<HttpsConnector<HttpConnector>> {
+    let https = HttpsConnector::new();
 
-    let client = hyper::Client::builder().build::<_, hyper::Body>(https);
-    client
+    hyper::client::Client::builder().build::<_, hyper::Body>(https)
 }
 
 #[derive(Debug, Clone)]
@@ -82,13 +74,27 @@ impl ApiOptions {
         Ok(ApiOptions::new(API_ENDPOINT.to_string(), key))
     }
 
-    pub async fn from_google_secret_manager(project: &str, secret: &str) -> Result<ApiOptions> {
-        let auth = Authenticator::auth().await?;
-        let client = SecretManager::new_with_authenticator(auth).await;
-
-        let key = client.get_secret(project, secret).await?;
-        let key = String::from_utf8(key)?;
-
+    pub async fn from_aws_secret_manager(project: &str, secret: &str) -> Result<ApiOptions> {
+        let cfg = load_defaults(BehaviorVersion::latest()).await;
+        let client = aws_sdk_secretsmanager::Client::new(&cfg);
+        
+        let key = match client
+            .get_secret_value()
+            .secret_id(secret)
+            .send()
+            .await
+            {
+                Ok(s) => {
+                    if let Some(s) = s.secret_string {
+                        s
+                    } else {
+                        return Err(anyhow!("No Secret found for given posthog key"))
+                    }
+                }
+                Err(e) => {
+                    return Err(anyhow!("error getting secret: {e:?}"));
+                }
+            };
 
         assert!(!key.trim().is_empty());
 
@@ -98,7 +104,7 @@ impl ApiOptions {
     pub async fn auto(project: &str, secret: &str) -> Result<ApiOptions> {
         match ApiOptions::from_env() {
             Ok(options) => Ok(options),
-            Err(_) => match ApiOptions::from_google_secret_manager(project, secret).await {
+            Err(_) => match ApiOptions::from_aws_secret_manager(project, secret).await {
                 Ok(options) => Ok(options),
                 Err(e) => Err(e),
             },
@@ -237,7 +243,7 @@ mod tests {
     async fn test_client_google_secret_manager() {
         let project = std::env::var("PROJECT").unwrap();
         let secret = std::env::var("SECRET").unwrap();
-        let opts = ApiOptions::from_google_secret_manager(project.as_str(),secret.as_str()).await;
+        let opts = ApiOptions::from_aws_secret_manager(project.as_str(),secret.as_str()).await;
         if opts.is_err() {
             panic!("Error: {}", opts.err().unwrap());
         }
