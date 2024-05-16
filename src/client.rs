@@ -74,7 +74,7 @@ impl ApiOptions {
         Ok(ApiOptions::new(API_ENDPOINT.to_string(), key))
     }
 
-    pub async fn from_aws_secret_manager(project: &str, secret: &str) -> Result<ApiOptions> {
+    pub async fn from_aws_secret_manager(secret: &str) -> Result<ApiOptions> {
         let cfg = load_defaults(BehaviorVersion::latest()).await;
         let client = aws_sdk_secretsmanager::Client::new(&cfg);
         
@@ -101,10 +101,10 @@ impl ApiOptions {
         Ok(ApiOptions::new(API_ENDPOINT.to_string(), key))
     }
 
-    pub async fn auto(project: &str, secret: &str) -> Result<ApiOptions> {
+    pub async fn auto(secret: &str) -> Result<ApiOptions> {
         match ApiOptions::from_env() {
             Ok(options) => Ok(options),
-            Err(_) => match ApiOptions::from_aws_secret_manager(project, secret).await {
+            Err(_) => match ApiOptions::from_aws_secret_manager(secret).await {
                 Ok(options) => Ok(options),
                 Err(e) => Err(e),
             },
@@ -240,10 +240,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_client_google_secret_manager() {
-        let project = std::env::var("PROJECT").unwrap();
+    async fn test_client_aws_secret_manager() {
         let secret = std::env::var("SECRET").unwrap();
-        let opts = ApiOptions::from_aws_secret_manager(project.as_str(),secret.as_str()).await;
+        
+        let opts = ApiOptions::from_aws_secret_manager(secret.as_str()).await;
         if opts.is_err() {
             panic!("Error: {}", opts.err().unwrap());
         }
